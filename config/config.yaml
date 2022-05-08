@@ -22,7 +22,7 @@ eps_angle: 15 #allowed difference of angles in degrees for perpendicular plane m
 minX: 0 #min point of box filter
 minY: -5 #right
 minZ: 0.1
-maxX: 3 #max point of box filter
+maxX: 2 #max point of box filter
 maxY: 5 # left
 maxZ: 0.7 # height 
 mean_k: 5 #number of neighbors to analyze for each point for noise removal
@@ -43,7 +43,7 @@ std_mul: 0.5 #standard deviation multiplication threshold for noise removal
 # std_mul: 1.5 #standard deviation multiplication threshold for noise removal
 
 # ICP parametrs
-time_between_cloud_points: 0.5 #minimum time to wait to capture consecetive cloud points 
+time_between_cloud_points: 0.3 #minimum time to wait to capture consecetive cloud points 
 transformation_epsilon: 0.008 #minimum transformation difference for termination condition
 euclidean_fitness_epsilon: 0.01 #maximum allowed Euclidean error between two consecutive steps in the ICP loop
 max_correspondence_distance: 0.1 #correspondences with higher distances will be ignored >20cm 

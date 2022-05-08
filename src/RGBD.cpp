@@ -247,7 +247,7 @@ void RGBD::cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
         pcl::PointCloud<pcl::PointXYZ>::Ptr trans_cloud_ptr(new pcl::PointCloud<pcl::PointXYZ>);
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr trans_cloudrgb_ptr(new pcl::PointCloud<pcl::PointXYZRGB>);
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr n_pcs(new pcl::PointCloud<pcl::PointXYZRGB>);
-        // pcl::PointCloud<pcl::PointXYZRGB>::Ptr res_pc(new pcl::PointCloud<pcl::PointXYZRGB>);
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr res_pc(new pcl::PointCloud<pcl::PointXYZRGB>);
 
 	    pcl::PointCloud<pcl::PointXYZRGBA>::Ptr prev_rgba_cloud_ptr (new pcl::PointCloud<pcl::PointXYZRGBA>(_prev_rgba_cloud));
         pcl::PointCloud<pcl::PointXYZRGBA>::Ptr curr_pc(new pcl::PointCloud<pcl::PointXYZRGBA>);
@@ -259,26 +259,32 @@ void RGBD::cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
         pcl::fromROSMsg(*msg, *curr_pc);
         pcl::transformPointCloud(*current_cloud_ptr, *trans_curr_cloud_ptr, transform_1);    //     
         robot_pose_2 << robot_pose.getOrigin().x(), robot_pose.getOrigin().y(), robot_pose.getOrigin().z(); //current robot pose
+
+        double roll, pitch, yaw;
+        tf2::Matrix3x3(mCamera2BaseTransf.getRotation()).getRPY(roll, pitch, yaw);
+        robot_pose_pred <<robot_pose_2[0]+0.2*cos(yaw), robot_pose_2[1] + 0.2* sin(yaw), robot_pose_2[2]; // predict robot pose
         // cout<< "robot_pose"<<endl<<robot_pose_2<<endl;
         filterCloud(trans_curr_cloud_ptr, filtered_cloud_ptr);
         pcl::transformPointCloud(*filtered_cloud_ptr, *curr_cloud_ptr_w_frame, transform_2);  //       
        
         Eigen::Vector3d robot_pose_change = robot_pose_2 - robot_pose_1; // chane of robot pose in x,y,z
         cout<<"robot_pose_change"<<endl<<robot_pose_change<<endl;
-        Eigen::Vector3d pt;  
+        Eigen::Vector3d pt, f_pt, Force;  
         pcl::copyPointCloud(*curr_cloud_ptr_w_frame, *n_pcs);
-        // pcl::copyPointCloud(*filtered_cloud_ptr, *res_pc);
+        pcl::copyPointCloud(*filtered_cloud_ptr, *res_pc);
         Eigen::Vector3d robot_pose_2_pt_diff;
         double time_to_dmin, ttc, d_min_temp, min_d_norm, sigma, x, risk_function, risk, max_dist, k =1;
         double norm_factor = robot_pose_change.norm();
+        std::vector<Eigen::Vector3d> force_vector;
         pcl::PointXYZ min_pt, max_pt;
         pcl::getMinMax3D (*curr_cloud_ptr_w_frame, min_pt, max_pt);//get 
         max_dist = hypot(hypot(max_pt.x, min_pt.y), max_pt.z);//
         int Offset = 0.5, max_value = 1, step_saturation = 5;
         step_saturation = step_saturation + Offset;
+        Force<<0,0,0;
         for (auto &it : n_pcs->points) {
             pt << it.x, it.y, it.z;
-            robot_pose_2_pt_diff = robot_pose_2 - pt;
+            robot_pose_2_pt_diff = robot_pose_pred - pt;
             time_to_dmin = -(robot_pose_2_pt_diff).dot(robot_pose_change)/(pow(robot_pose_change.norm(),2));
 
             d_min_temp = ((robot_pose_change.cross(robot_pose_2_pt_diff)).norm()) / robot_pose_change.norm();
@@ -305,8 +311,12 @@ void RGBD::cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
             }
             
             it.rgb = risk_function;
+            f_pt << -pt/pt.norm();
+            // force_vector.push_back((risk_function/pow(pt.norm(),2))*f_pt);
+            Force+= (risk_function/pow(pt.norm(),2))*f_pt;
+            // res_pc->points.at()
         }        
-        
+        cout<<Force;
         
         robot_pose_1 = robot_pose_2; //update robot pose
         _prev_time_stamp = msg->header.stamp.toSec();

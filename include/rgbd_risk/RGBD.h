@@ -106,7 +106,7 @@ class RGBD
         tf2::Transform robot_pose;//robot pose from SLAM
         geometry_msgs::TransformStamped pose_msg;
 
-        Eigen::Vector3d robot_pose_1, robot_pose_2; // previous robot pose
+        Eigen::Vector3d robot_pose_1, robot_pose_2, robot_pose_pred; // previous robot pose
 
 };
 
