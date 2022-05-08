@@ -1,0 +1,55 @@
+# frames
+frame_id: odom
+camera_frame_id: realsense_link
+base_frame_id: base_link
+# ros topics
+point_cloud_sub_topic: /turtlebot/realsense_d435i/points #point cloud ros topic to subscribe to gazebo
+pose_sub_topic: /pose_slam/odom #pose with covariance from zed 
+
+# point_cloud_sub_topic: /zed2/zed_node/point_cloud/cloud_registered #point cloud ros topic to subscribe to zed camera
+# point_cloud_sub_topic: /zed2/zed_node/mapping/fused_cloud #fused point cloud ros topic to subscribe to zed camera
+imu_topic: /zed2/zed_node/imu/data #imu ros topic to subscribe to zed imu
+# pose_sub_topic: /zed2/zed_node/pose #pose with covariance from zed 
+
+point_cloud_pub_topic: /turtlebot/rgbd/point_cloud/cloud_registered #point cloud ros topic to publish
+pose_pub_topic: /turtlebot/rgbd/pose #pose ros topic to which to publish
+odom_pub_topic: /turtlebot/rgbd/vo #odom(VO) to be used by ekf  ros topic to which to publish
+
+# filtering parametrs realsense
+leaf_size: 0.025 #leaf size for voxel grid for dawnsampling cloud points
+dist_threshold: 0.005 #distance threshold for RASNSAC to consider a point as inlier
+eps_angle: 15 #allowed difference of angles in degrees for perpendicular plane model
+minX: 0 #min point of box filter
+minY: -5 #right
+minZ: 0.1
+maxX: 3 #max point of box filter
+maxY: 5 # left
+maxZ: 0.7 # height 
+mean_k: 5 #number of neighbors to analyze for each point for noise removal
+std_mul: 0.5 #standard deviation multiplication threshold for noise removal
+
+
+# # filtering parametrs ZED
+# leaf_size: 0.00000005 #leaf size for voxel grid for dawnsampling cloud points
+# dist_threshold: 0.1 #distance threshold for RASNSAC to consider a point as inlier
+# eps_angle: 15 #allowed difference of angles in degrees for perpendicular plane model
+# minX: 0 #min point of box filter
+# minY: -2
+# minZ: -1.5
+# maxX: 3.0 #max point of box filter
+# maxY: 2
+# maxZ: 3.0
+# mean_k: 50 #number of neighbors to analyze for each point for noise removal
+# std_mul: 1.5 #standard deviation multiplication threshold for noise removal
+
+# ICP parametrs
+time_between_cloud_points: 0.5 #minimum time to wait to capture consecetive cloud points 
+transformation_epsilon: 0.008 #minimum transformation difference for termination condition
+euclidean_fitness_epsilon: 0.01 #maximum allowed Euclidean error between two consecutive steps in the ICP loop
+max_correspondence_distance: 0.1 #correspondences with higher distances will be ignored >20cm 
+max_iterations: 5 #max number of registration iterations
+
+# clustering params
+cluster_tolerance: 0.2
+min_cluster_size: 5
+max_cluster_size: 10000

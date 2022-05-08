@@ -1,0 +1,12 @@
+<!-- -->
+<launch>
+	<include file="$(find zed_wrapper)/launch/zed2.launch"/>
+	
+	<node pkg="rgbd_risk" type="rgbd_node" name="rgbd_node" output="screen" clear_params="true">
+		<rosparam command="load" file="$(find rgbd_risk)/config/config.yaml" />
+	</node>
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find rgbd_risk)/config/config.rviz"/>
+
+
+</launch>
+
