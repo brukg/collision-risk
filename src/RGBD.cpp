@@ -201,12 +201,7 @@ void RGBD::cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
     
     Eigen::Matrix4f transform_2 = Eigen::Matrix4f::Identity();
 
-    rot_1 =  tf2::Matrix3x3(robot_pose.getRotation());
 
-    transform_2 << rot_1[0][0], rot_1[0][1], rot_1[0][2], robot_pose.getOrigin().x(),
-                    rot_1[1][0], rot_1[1][1], rot_1[1][2], mCamera2BaseTransf.getOrigin().y(),
-                    rot_1[2][0], rot_1[2][1], rot_1[2][2], mCamera2BaseTransf.getOrigin().z(),
-                    0, 0, 0, 1;
     // cout<<"transform_1 "<<endl<<transform_1<<endl;
     if(is_initial){
 	    pcl::PointCloud<pcl::PointXYZ>::Ptr prev_cloud_ptr (new pcl::PointCloud<pcl::PointXYZ>);
@@ -265,6 +260,11 @@ void RGBD::cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
         robot_pose_pred <<robot_pose_2[0]+0.2*cos(yaw), robot_pose_2[1] + 0.2* sin(yaw), robot_pose_2[2]; // predict robot pose
         // cout<< "robot_pose"<<endl<<robot_pose_2<<endl;
         filterCloud(trans_curr_cloud_ptr, filtered_cloud_ptr);
+        rot_1 =  tf2::Matrix3x3(robot_pose.getRotation());
+        transform_2 << rot_1[0][0], rot_1[0][1], rot_1[0][2], robot_pose.getOrigin().x(),
+                        rot_1[1][0], rot_1[1][1], rot_1[1][2], mCamera2BaseTransf.getOrigin().y(),
+                        rot_1[2][0], rot_1[2][1], rot_1[2][2], mCamera2BaseTransf.getOrigin().z(),
+                        0, 0, 0, 1;
         pcl::transformPointCloud(*filtered_cloud_ptr, *curr_cloud_ptr_w_frame, transform_2);  //       
        
         Eigen::Vector3d robot_pose_change = robot_pose_2 - robot_pose_1; // chane of robot pose in x,y,z
@@ -311,12 +311,12 @@ void RGBD::cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
             }
             
             it.rgb = risk_function;
-            f_pt << -pt/pt.norm();
+            f_pt << (robot_pose_2-pt)/(robot_pose_2-pt).norm();
             // force_vector.push_back((risk_function/pow(pt.norm(),2))*f_pt);
-            Force+= (risk_function/pow(pt.norm(),2))*f_pt;
+            Force+= f_pt*(risk_function/pow((robot_pose_2-pt).norm(),2));
             // res_pc->points.at()
         }        
-        cout<<Force;
+        cout<<Force/Force.norm()<<endl;
         
         robot_pose_1 = robot_pose_2; //update robot pose
         _prev_time_stamp = msg->header.stamp.toSec();
@@ -453,139 +453,3 @@ void RGBD::cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
 
     return;
 }
-
-
-
-
-
-
-
-// /*
-// IMU topic callback
-// */
-// void RGBD::imuCallback(const sensor_msgs::Imu::ConstPtr& msg)
-// {
-//     // ROS_INFO("imu callback");
-//     if(is_imu_start)
-//     {
-//         _prev_acc = msg->linear_acceleration.x;
-//         _prev_imu_time = msg->header.stamp.toSec();
-
-//         is_imu_start = false;
-//     }
-//     else
-//     {
-//         _curr_acc = msg->linear_acceleration.x;
-//         _curr_imu_time = msg->header.stamp.toSec();
-
-//         double del_time = _curr_imu_time - _prev_imu_time;
-//         double avg_acc = 0.5*(_prev_acc + _curr_acc);
-
-//         _speed = avg_acc*del_time;
-//         _yaw_rate = msg->angular_velocity.z;
-
-//         _prev_acc = _curr_acc;
-//         _prev_imu_time = _curr_imu_time;
-//     }
-
-//     return;
-// }
-
-
-
-
-
-
-// transform from camera frame to base frame
-        // tf2::Transform T;
-        // T.setOrigin(tf2::Vector3(curr_transformation(0,3), curr_transformation(1,3), curr_transformation(2,3)));
-        // T.setRotation(tf2::Quaternion(quat.x(), quat.y(), quat.z(), quat.w()));
-        // tf2::Transform RT = T*mCamera2BaseTransf.inverse();
-        // tf2::convert(RT, mTf2Transf);
-        // geometry_msgs::Transform camera2base = tf2::toMsg(T);
-
-        // geometry_msgs::PoseWithCovarianceStamped curr_pose;
-        // curr_pose.header.stamp = ros::Time::now();
-        // curr_pose.header.frame_id = "base_link"; //remember to change to odom frame or other custom frame
-        // curr_pose.pose.pose.position.x = trans[0];
-        // curr_pose.pose.pose.position.y = trans[1];        
-        // // curr_pose.pose.pose.position.z = trans[2];        
-        // curr_pose.pose.pose.orientation.x = quat.x();
-        // curr_pose.pose.pose.orientation.y = quat.y();        
-        // curr_pose.pose.pose.orientation.z = quat.z();        
-        // curr_pose.pose.pose.orientation.w = quat.w();
-        // pose_pub.publish(curr_pose); //publishing the current pose
-
-        // cout<<"-------ZED handles transformation between frames for realsense transformation required---------"<<endl; 
-        // tf2::TransformListener *tf_ = new tf::TransformListener;
-        // tf_->waitForTransform("odom", "realsense_link", t, ros::Duration(1.0));
-        // tf_->lookupTransform("odom", "realsense_link", t, transform);
-
-
-
-
-        // cloud_res = sl::Resolution(1280, 1024);
-
-        // // Allocate PCL point cloud at the resolution
-        // pcl::PointCloud<pcl::PointXYZRGB>::Ptr n_pcs(new pcl::PointCloud<pcl::PointXYZRGB>);
-        // n_pcs->points.resize(cloud_res.area());
-        // pcl::copyPointCloud(*current_cloud_ptr, *n_pcs);
-
-        // shared_ptr<pcl::visualization::PCLVisualizer> viewer = createRGBVisualizer(n_pcs);
-        
-        // // Set Viewer initial position
-        // viewer->setCameraPosition(0, 0, 5,    0, 0, 1,   0, 1, 0);
-        // viewer->setCameraClipDistances(0.1,1000);
-        // // Loop until viewer catches the stop signal
-        // while (!viewer->wasStopped()) {
-
-        //         //Lock to use the point cloud
-        //         // mutex_input.lock();
-        //         // float *p_data_cloud = data_cloud.getPtr<float>();
-        //         int index = 0;
-
-        //         // Check and adjust points for PCL format
-        //         for (auto &it : n_pcs->points) {
-        //             // float X = p_data_cloud[index];
-        //             // if (!isValidMeasure(X)) // Checking if it's a valid point
-        //                 // cout<<"invalid point"<<endl;
-        //                 // it.x = it.y = it.z = it.rgb = 0;
-        //             // else {
-        //                 it.x = trans_cloud_ptr->points[index].x;
-        //                 it.y = trans_cloud_ptr->points[index].y;
-        //                 it.z = trans_cloud_ptr->points[index].z;
-        //                 it.rgb = convertColor(trans_cloud_ptr->points[index].x);//convertColor(p_data_cloud[index+2]); // Convert a 32bits float into a pcl .rgb format
-        //             // }
-        //             index += 4;
-        //         }
-
-        //         // Unlock data and update Point cloud
-        //         // mutex_input.unlock();
-        //         viewer->updatePointCloud(n_pcs);
-        //         viewer->spinOnce(10);
-        // }
-
-        // // Close the viewer
-        // viewer->close();   
-
-
-        // cv::Mat result; 
-
-        // if (n_pcs->isOrganized()) {
-        //     result = cv::Mat(n_pcs->height, n_pcs->width, CV_8UC3);
-
-        //     if (!n_pcs->empty()) {
-
-        //         for (int h=0; h<result.rows; h++) {
-        //             for (int w=0; w<result.cols; w++) {
-        //                 pcl::PointXYZRGBA point = n_pcs->points.at(w, h);
-
-        //                 Eigen::Vector3i rgb = point.getRGBVector3i();
-
-        //                 result.at<cv::Vec3b>(h,w)[0] = rgb[2];
-        //                 result.at<cv::Vec3b>(h,w)[1] = rgb[1];
-        //                 result.at<cv::Vec3b>(h,w)[2] = rgb[0];
-        //             }
-        //         }
-        //     }
-        // } 
