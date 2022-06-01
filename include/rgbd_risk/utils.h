@@ -19,6 +19,8 @@ using namespace std;
 
 /* 
 * @brief print 4x4 matrix 
+This function takes the reference of a 4x4 matrix and prints the rigid transformation in an human readable way.
+
 **/
 void print4x4Matrix (const Eigen::Matrix4f &matrix)
 {
@@ -130,35 +132,7 @@ void RGBD::filterCloud(const pcl::PointCloud<pcl::PointXYZ>::Ptr in_cloud_ptr, p
     return;
 }
 
-// /*
-// * @brief cluster the point cloud using euclidean cluster extraction
-// **/
-// void RGBD::clusterCloud(const pcl::PointCloud<pcl::PointXYZ>::Ptr in_cloud_ptr, pcl::PointCloud<pcl::PointXYZ>::Ptr out_cloud_ptr)
-// {
-//     pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
-//     tree->setInputCloud(in_cloud_ptr);
 
-//     std::vector<pcl::PointIndices> cluster_indices;
-//     pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
-//     ec.setClusterTolerance(_cluster_tolerance);
-//     ec.setMinClusterSize(_min_cluster_size);
-//     ec.setMaxClusterSize(_max_cluster_size);
-//     ec.setSearchMethod(tree);
-//     ec.setInputCloud(in_cloud_ptr);
-//     ec.extract(cluster_indices);
-
-//     int j = 0;
-//     for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin(); it != cluster_indices.end(); ++it)
-//     {
-//         for (std::vector<int>::const_iterator idx = it->indices.begin(); idx != it->indices.end(); ++idx)
-//             out_cloud_ptr->points.push_back(in_cloud_ptr->points[*idx]); //*
-//         out_cloud_ptr->width = out_cloud_ptr->points.size();
-//         out_cloud_ptr->height = 1;
-//         out_cloud_ptr->is_dense = true;
-
-//     }
-//     return;
-// }
 
 
 /*

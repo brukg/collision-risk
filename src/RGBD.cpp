@@ -5,10 +5,17 @@
 #include <chrono>
 #include <mutex>
 #include <math.h> 
+#include <cstdlib>
+#include <cmath>
+#include <bits/stdc++.h>
+
 
 #include <geometry_msgs/PoseWithCovarianceStamped.h> //rose pose msg with covariance
 #include <geometry_msgs/PoseStamped.h> //ros pose msg
 #include <nav_msgs/Odometry.h> //ros odometry msg
+#include "std_msgs/String.h" //signal message
+
+
 
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/LinearMath/Matrix3x3.h>
@@ -17,11 +24,11 @@
 
 
 
-
 // #include <pcl/registration/icp.h>
 #include <pcl/registration/gicp.h> //generalized iterative closest point algorithm from pcl
 #include <pcl/conversions.h>
 #include <pcl/ModelCoefficients.h>
+#include <pcl/common/centroid.h>
 
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl_ros/transforms.h>
@@ -32,15 +39,19 @@
 #include <pcl/common/common_headers.h>
 
 // ZED includes
-#include <sl/Camera.hpp>
+// #include <sl/Camera.hpp>
 #include <opencv2/core.hpp>
 
-using namespace std;
-using namespace sl;
+//visulaization marker
+#include <visualization_msgs/Marker.h>
 
-Mat data_cloud;
+
+using namespace std;
+// using namespace sl; 
+
+// Mat data_cloud;
 std::mutex mutex_input;
-sl::Resolution cloud_res;
+// sl::Resolution cloud_res;
 
 /* @brief Constructor */
 RGBD::RGBD(ros::NodeHandle node, ros::NodeHandle private_nh)
@@ -77,6 +88,7 @@ RGBD::RGBD(ros::NodeHandle node, ros::NodeHandle private_nh)
     private_nh.param<std::string>("pose_pub_topic", _pose_pub_topic, "rgbd_pose");
     private_nh.param<std::string>("odom_pub_topic", _odom_pub_topic, "rgbd_pose");
     private_nh.param<std::string>("point_cloud_pub_topic", _point_cloud_pub_topic, "rgbd_pose");
+    private_nh.param<std::string>("stop_signal_topic", _stop_signal_topic, "rgbd_pose");
     
     // subscribers params
     private_nh.param<std::string>("pose_sub_topic", _pose_sub_topic, "");
@@ -99,6 +111,12 @@ RGBD::RGBD(ros::NodeHandle node, ros::NodeHandle private_nh)
     pose_pub = node.advertise<geometry_msgs::PoseWithCovarianceStamped>(_pose_pub_topic, 1);
     odom_pub = node.advertise<nav_msgs::Odometry>(_odom_pub_topic, 1);
     pc_pub = node.advertise<sensor_msgs::PointCloud2>(_point_cloud_pub_topic, 5);
+    signal_pub = node.advertise<std_msgs::String>(_stop_signal_topic,1);
+    // vis_pub = node.advertise<geometry_msgs::PoseStamped>( "visualization_marker", 0 );
+    vis_pub = node.advertise<visualization_msgs::Marker>( "visualization_marker", 0 );
+
+    vis_pub_centroid = node.advertise<geometry_msgs::PoseStamped>( "visualization_centroid", 0 );
+    // vis_pub = node.advertise<geometry_msgs::PoseStamped>( "visualization_marker", 0 );
 
     //initialising values
     _prev_acc = 0.0;
@@ -150,11 +168,7 @@ bool RGBD::getCamera2BaseTransform()
         // Get the TF2 transformation
         tf2::fromMsg(c2b.transform, mCamera2BaseTransf);
 
-        double roll, pitch, yaw;
-        tf2::Matrix3x3(mCamera2BaseTransf.getRotation()).getRPY(roll, pitch, yaw);
-        ROS_INFO("%.3f", roll);
     } catch (tf2::TransformException& ex) {
-        ROS_INFO("%s", ex.what());
         if (!first_error) {
             first_error = false;
         }
@@ -175,7 +189,7 @@ void RGBD::poseCallback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr
     tf2::Quaternion q(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z, msg->pose.pose.orientation.w);
     robot_pose.setRotation(q);
     robot_pose.setOrigin(tf2::Vector3(msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.position.z));
-    // cout<<"xyz"<<robot_pose.getOrigin().x()<<"y"<<robot_pose.getOrigin().y()<<"z"<<robot_pose.getOrigin().z()<<endl;
+    //cout<<"xyz"<<robot_pose.getOrigin().x()<<"y"<<robot_pose.getOrigin().y()<<"z"<<robot_pose.getOrigin().z()<<endl;
     return;
 }
 
@@ -192,18 +206,21 @@ void RGBD::cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
     tf2::Matrix3x3 rot_1;
     if (!mCamera2BaseTransfValid) getCamera2BaseTransform();
 
+    if (mCamera2BaseTransfValid){
     rot_1 =  tf2::Matrix3x3(mCamera2BaseTransf.getRotation());
 
     transform_1 << rot_1[0][0], rot_1[0][1], rot_1[0][2], mCamera2BaseTransf.getOrigin().x(),
                     rot_1[1][0], rot_1[1][1], rot_1[1][2], mCamera2BaseTransf.getOrigin().y(),
                     rot_1[2][0], rot_1[2][1], rot_1[2][2], mCamera2BaseTransf.getOrigin().z(),
                     0, 0, 0, 1;
-    
+    }
     Eigen::Matrix4f transform_2 = Eigen::Matrix4f::Identity();
 
-
+    //......................................................................................................................................
     // cout<<"transform_1 "<<endl<<transform_1<<endl;
     if(is_initial){
+
+        //cout<<"inside initial========================="<<endl;
 	    pcl::PointCloud<pcl::PointXYZ>::Ptr prev_cloud_ptr (new pcl::PointCloud<pcl::PointXYZ>);
 	    pcl::PointCloud<pcl::PointXYZ>::Ptr trans_prev_cloud_ptr (new pcl::PointCloud<pcl::PointXYZ>);
 	    pcl::PointCloud<pcl::PointXYZ>::Ptr prev_cloud_ptr_w_frame (new pcl::PointCloud<pcl::PointXYZ>);
@@ -232,7 +249,10 @@ void RGBD::cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
 
         is_initial = false;
     }
+
     if(msg->header.stamp.toSec()- _prev_time_stamp > _time_between_cloud_points){//icp every T seconds
+
+        //cout<<"coming======================"<<endl;
 	    pcl::PointCloud<pcl::PointXYZ>::Ptr prev_cloud_ptr (new pcl::PointCloud<pcl::PointXYZ>(_prev_cloud));
         pcl::PointCloud<pcl::PointXYZ>::Ptr current_cloud_ptr(new pcl::PointCloud<pcl::PointXYZ>);
 	    pcl::PointCloud<pcl::PointXYZ>::Ptr trans_curr_cloud_ptr (new pcl::PointCloud<pcl::PointXYZ>);
@@ -254,21 +274,26 @@ void RGBD::cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
         pcl::fromROSMsg(*msg, *curr_pc);
         pcl::transformPointCloud(*current_cloud_ptr, *trans_curr_cloud_ptr, transform_1);    //     
         robot_pose_2 << robot_pose.getOrigin().x(), robot_pose.getOrigin().y(), robot_pose.getOrigin().z(); //current robot pose
+        //cout<<"xyz "<<robot_pose.getOrigin().x()<<"y "<<robot_pose.getOrigin().y()<<"z "<<robot_pose.getOrigin().z()<<endl;
 
         double roll, pitch, yaw;
         tf2::Matrix3x3(mCamera2BaseTransf.getRotation()).getRPY(roll, pitch, yaw);
         robot_pose_pred <<robot_pose_2[0]+0.2*cos(yaw), robot_pose_2[1] + 0.2* sin(yaw), robot_pose_2[2]; // predict robot pose
-        // cout<< "robot_pose"<<endl<<robot_pose_2<<endl;
+
+        //cout<< "robot_pose"<<endl<<robot_pose_2<<endl;
+
         filterCloud(trans_curr_cloud_ptr, filtered_cloud_ptr);
-        rot_1 =  tf2::Matrix3x3(robot_pose.getRotation());
-        transform_2 << rot_1[0][0], rot_1[0][1], rot_1[0][2], robot_pose.getOrigin().x(),
-                        rot_1[1][0], rot_1[1][1], rot_1[1][2], mCamera2BaseTransf.getOrigin().y(),
-                        rot_1[2][0], rot_1[2][1], rot_1[2][2], mCamera2BaseTransf.getOrigin().z(),
-                        0, 0, 0, 1;
+        tf2::Matrix3x3 rot_2(robot_pose.getRotation());
+        transform_2 <<  rot_2[0][0], rot_2[0][1],   0, robot_pose.getOrigin().x(),
+                        rot_2[1][0], rot_2[1][1],   0, robot_pose.getOrigin().y(),
+                        0,              0,          1, robot_pose.getOrigin().z(),
+                        0,              0,          0, 1;
         pcl::transformPointCloud(*filtered_cloud_ptr, *curr_cloud_ptr_w_frame, transform_2);  //       
        
         Eigen::Vector3d robot_pose_change = robot_pose_2 - robot_pose_1; // chane of robot pose in x,y,z
-        cout<<"robot_pose_change"<<endl<<robot_pose_change<<endl;
+        //cout<<"robot_pose_change:"<<endl<<robot_pose_change<<endl; 
+        //cout<<"robot pose 1:"<<robot_pose_1<<endl;
+        //cout<<"robot pose 2:"<<robot_pose_2<<endl;
         Eigen::Vector3d pt, f_pt, Force;  
         pcl::copyPointCloud(*curr_cloud_ptr_w_frame, *n_pcs);
         pcl::copyPointCloud(*filtered_cloud_ptr, *res_pc);
@@ -282,15 +307,61 @@ void RGBD::cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
         int Offset = 0.5, max_value = 1, step_saturation = 5;
         step_saturation = step_saturation + Offset;
         Force<<0,0,0;
-        for (auto &it : n_pcs->points) {
-            pt << it.x, it.y, it.z;
-            robot_pose_2_pt_diff = robot_pose_pred - pt;
+        // cout<<"random force"<<Force<<endl;
+        // cout<<"random force norm"<<Force.norm()<<endl;
+
+        //edowardo's=================================================================================>
+
+        // clustering point clouds using euclidean clustering 
+        clusterCloud(filtered_cloud_ptr, clustered_clouds_ptr);
+        // cout<<clustered_clouds_ptr.size()<<endl;
+
+        //getting centroids
+        pcl::CentroidPoint<pcl::PointXYZ>centroid;
+        pcl::PointXYZRGB c1;
+        //array of risk for each cluster
+        float risk_array[5] = { 0.0 };
+        for (int i = 0; i < clustered_clouds_ptr.size(); i++){
+             //cout << "Point Cloud " << i << " has got " << clustered_clouds_ptr[i]->size() << " Points" << endl;
+           for (auto &it : clustered_clouds_ptr[i]->points) {
+            //cout<<"come inside..."<<endl;
+                // cout <<"print"<< it.x <<endl;
+                // cout <<"print"<< it.y <<endl;
+                // cout <<"print"<< it.z <<endl;
+                centroid.add(pcl::PointXYZ (it.x, it.y, it.z));
+
+           }
+           centroid.get(c1);
+
+            geometry_msgs::PoseStamped pp;
+            pp.header.stamp = ros::Time();
+            pp.header.frame_id = _base_frame_id;
+            pp.pose.position.x =  c1.x;
+            pp.pose.position.y =  c1.y;
+            pp.pose.position.z =  c1.z;
+            vis_pub_centroid.publish( pp );
+           
+            //cout<<"----------------centroid:"<<c1<<endl;
+
+           // clustered_clouds_ptr[i]->header.frame_id = _base_frame_id;
+           //cout<<"come inside..."<<endl;
+           pt << c1.x, c1.y, c1.z;
+            // cout<<"pt:"<<pt<<endl;
+           robot_pose_2_pt_diff = robot_pose_pred - pt;
+
+            //cout<<"robot_pose_2_pt_diff :"<<robot_pose_2_pt_diff<<endl;
+            //cout<<"robot_pose_change..:"<<robot_pose_change<<endl; 0,0,0 even when teleoperate
+
             time_to_dmin = -(robot_pose_2_pt_diff).dot(robot_pose_change)/(pow(robot_pose_change.norm(),2));
 
             d_min_temp = ((robot_pose_change.cross(robot_pose_2_pt_diff)).norm()) / robot_pose_change.norm();
+
+            //cout<<"time_to_dmin :"<<time_to_dmin<<endl; ===>none
+            //cout<<"_time_between_cloud_points..:"<<_time_between_cloud_points<<endl;
             
             ttc = ((time_to_dmin - 1) * _time_between_cloud_points) + Offset;
-            
+            //cout<<"ttc..:"<<ttc<<endl;==> none
+
             min_d_norm = d_min_temp/norm_factor;
 
             if(ttc < 0.01){
@@ -298,6 +369,8 @@ void RGBD::cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
             }
             sigma = k * (ttc);
             x = min_d_norm;
+            //cout<<"k..:"<<k<<endl;
+            //cout<<"sigma...:"<<sigma<<endl;===>none
 
             /// Modified code
             risk_function = k/(sigma) * exp(- pow(x,2) / (2 * pow(sigma,2)) );
@@ -310,142 +383,104 @@ void RGBD::cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
                 risk_function = step_saturation * risk_function;
             }
             
-            it.rgb = risk_function;
-            f_pt << (robot_pose_2-pt)/(robot_pose_2-pt).norm();
-            // force_vector.push_back((risk_function/pow(pt.norm(),2))*f_pt);
-            Force+= f_pt*(risk_function/pow((robot_pose_2-pt).norm(),2));
-            // res_pc->points.at()
-        }        
-        cout<<Force/Force.norm()<<endl;
+            c1.rgb = risk_function;
+            risk_array[i] = risk_function;
         
+            //cout<<"risk function:"<<risk_function<<endl;===>none
+            f_pt << (robot_pose_2-pt)/(robot_pose_2-pt).norm();
+            //force_vector.push_back((risk_function/pow(pt.norm(),2))*f_pt);
+            Force+= f_pt*(risk_function/pow((robot_pose_2-pt).norm(),2));
+
+
+            
+        }
+        float max_risk=0.0;
+        for (int i=0;i<5;i++){
+            //cout<<"i<"<<i<<" risk "<<risk_array[i]<<endl;
+            if (risk_array[i]>max_risk){
+
+                max_risk = risk_array[i];
+            }
+        }
+        cout<<"maximum risk: "<<max_risk<<endl;
+        
+        
+
+        
+
+
+
+        cout<<"Force"<<Force<<endl;
+        cout<<"Force norm"<<Force.norm()<<endl;
+        
+
+        tf2::Quaternion F_quaternion;
+        double r,p,y;
+        y = atan2(robot_pose_2(1,0), robot_pose_2(0,0));
+        
+        F_quaternion.setRPY(0,0,atan2(Force(1),Force(0)) - y);
+
+
+        visualization_msgs::Marker marker;
+
+
+        
+
+        marker.header.frame_id = _frame_id;
+        marker.header.stamp = ros::Time();
+        marker.ns = "my_namespace";
+        marker.id = 0;
+        marker.type = visualization_msgs::Marker::ARROW;
+        marker.action = visualization_msgs::Marker::ADD;
+
+
+
+        marker.pose.position.x = robot_pose.getOrigin().x();
+        marker.pose.position.y = robot_pose.getOrigin().y();
+        marker.pose.position.z = robot_pose.getOrigin().z();
+        marker.pose.orientation.x = F_quaternion.x();
+        marker.pose.orientation.y = F_quaternion.y();
+        marker.pose.orientation.z = F_quaternion.z();
+        marker.pose.orientation.w = F_quaternion.w();
+        marker.scale.x = 0.5;
+        marker.scale.y = 0.1;
+        marker.scale.z = 0.1;
+        marker.color.a = 1.0;
+        marker.color.r = 0.0;
+        marker.color.g = 1.0;
+        marker.color.b = 0.0;
+        //vis_pub.publish( marker );
+
+        if (Force.norm() > 0.004){
+            vis_pub.publish( marker );
+        }
+
+        
+        if(max_risk > 0.046){
+            
+            std_msgs::String msg;
+
+            std::stringstream ss;
+            ss << "Stop";
+            msg.data = ss.str();
+            cout<<"send a signal"<<endl;
+            ROS_INFO("%s", msg.data.c_str());
+            signal_pub.publish(msg);
+
+        }
+        
+
         robot_pose_1 = robot_pose_2; //update robot pose
         _prev_time_stamp = msg->header.stamp.toSec();
 
-        // pcl::PointXYZ min_pt, max_pt;
-        // pcl::getMinMax3D (*filtered_cloud_ptr, min_pt, max_pt);//get 
-        // max_dist = hypot(hypot(max_pt.x, min_pt.y), max_pt.z);//
-        // cout<<"distances "<<max_pt.x <<min_pt.y <<max_pt.z<<endl;
-        // cout<<"max distance "<<max_dist<<endl;
-
-        // //Euclidean instantanious risk
-        // int index = 0;
-        // for (auto &it : n_pcs->points) {
-        //     risk = hypot(hypot(it.x, it.y), it.z)/max_dist;
-        //     it.rgb = (risk==risk)?risk:10;//convertColor(n_pcs->points[index].z); // put risk value as color 
-        //     // cout<<it.rgb<<endl;
-        //     // index += 4;
-        // }
         n_pcs->header.frame_id = _frame_id;
-        // n_pcs->header.frame_id = _base_frame_id;
 
-        pc_pub.publish(n_pcs); //publishing the aligned pointcloud
+        pc_pub.publish(n_pcs); //publishing the aligned pointcloud..............................................................///////////////////
         _prev_cloud = *curr_cloud_ptr_w_frame;
-        // prev_transformation = curr_transformation;
-        // _prev_rgba_cloud = *curr_pc;
 
 
-        // // correspondence grouping and feature matching using 
-        // correspondenceCloud(prev_rgba_cloud_ptr, curr_pc);
-        // cout << "ICP has converged:" << icp.hasConverged()
-        //     << " score: " << icp.getFitnessScore() << endl;
-
-
-        // // clustering point clouds using euclidean clustering 
-        // clusterCloud(filtered_cloud_ptr, clustered_clouds_ptr);
-        // cout<<clustered_clouds_ptr.size()<<endl;
-        // for (int i = 0; i < clustered_clouds_ptr.size() - 1; i++){
-        //     cout << "Point Cloud " << i << " has got " << clustered_clouds_ptr[i]->size() << " Points" << endl;
-        //     clustered_clouds_ptr[i]->header.frame_id = _base_frame_id;
-        //     // pc_pub.publish(clustered_clouds_ptr[i]); //publishing the aligned pointcloud
-
-        // }
-
-        // icp registration for visual odometry
-/*        pcl::GeneralizedIterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
-        icp.setTransformationEpsilon(_transformation_epsilon);
-        icp.setMaximumIterations(_max_iters);
-        icp.setMaxCorrespondenceDistance(_max_correspondence_distance);
-        icp.setEuclideanFitnessEpsilon(_euclidean_fitness_epsilon);
-     
-        icp.setInputSource(filtered_cloud_ptr);
-        icp.setInputTarget(prev_cloud_ptr);
-
-        double diff_time = msg->header.stamp.toSec() - _prev_time_stamp; //calculating time btw the matching pointclouds
-        end = chrono::system_clock::now();
-        
-        
-        chrono::duration<double> elapsed_seconds = end-start;
-        cout<<"elapsed time: " << elapsed_seconds.count() << "s\n"; 
-       
-
-        //cout<<"-------Matching clouds---------"<<endl;
-        //start = chrono::system_clock::now(); 
-        // inti_guess <<
-        tf2::Transform guess_transf;
-        // tf2::fromMsg(robot_pose, guess_transf);
-        cout<<robot_pose.getOrigin().x()<<endl;
-        // init_guess = tf2::transformToEigen (pose_msg);//converting geometry_msg to Eigen::Matrix4f
-        // icp.align(*trans_cloud_ptr, robot_pose);
-        icp.align(*trans_cloud_ptr);
 
         
-        Eigen::Matrix4f t = icp.getFinalTransformation();
-        Eigen::Matrix4f curr_transformation = prev_transformation*t; //final transformation matrix
-
-        print4x4Matrix (curr_transformation);
-
-        Eigen::Matrix3f rot_mat; //rotation matrix
-        Eigen::Vector3f trans; //translation vector        
-        trans << curr_transformation(0,3), curr_transformation(1,3), curr_transformation(2,3);
-        rot_mat << curr_transformation(0,0), curr_transformation(0,1), 0,
-                    curr_transformation(1,0), curr_transformation(1,1), 0,
-                    0, 0, 1;
-        
-        Eigen::Quaternionf quat(rot_mat); //rotation matrix stored as a quaternion
-        
-        // transform from camera frame to base frame
-        tf2::Transform T;
-        T.setOrigin(tf2::Vector3(curr_transformation(0,3), curr_transformation(1,3), curr_transformation(2,3)));
-        T.setRotation(tf2::Quaternion(quat.x(), quat.y(), quat.z(), quat.w()));
-        if (!mCamera2BaseTransfValid) getCamera2BaseTransform();
-        double roll, pitch, yaw;
-        tf2::Matrix3x3(mCamera2BaseTransf.getRotation()).getRPY(roll, pitch, yaw);
-
-        tf2::Quaternion quat_2;
-        quat_2.setRPY(roll, pitch, yaw);
-
-        mCamera2BaseTransf.setRotation(quat_2);
-        tf2::Transform RT = mCamera2BaseTransf *T;//*mCamera2BaseTransf.inverse();
-        geometry_msgs::Transform camera2base = tf2::toMsg(T);
-
-        nav_msgs::OdometryPtr odomMsg = boost::make_shared<nav_msgs::Odometry>();
-        odomMsg->header.stamp = ros::Time::now();
-        odomMsg->header.frame_id = _frame_id; //remember to change to odom frame or other custom frame mOdometryFrameId; // frame
-        // odomMsg->child_frame_id = _camera_frame_id; //camera frame
-        odomMsg->pose.pose.position.x =  camera2base.translation.x; 
-        odomMsg->pose.pose.position.y =  camera2base.translation.y; 
-        odomMsg->pose.pose.position.z =  camera2base.translation.z; 
-        odomMsg->pose.pose.orientation.x = camera2base.rotation.x;
-        odomMsg->pose.pose.orientation.y = camera2base.rotation.y;
-        odomMsg->pose.pose.orientation.z = camera2base.rotation.z;
-        odomMsg->pose.pose.orientation.w = camera2base.rotation.w;
-        
-        
-        //----------Note: for now the covariance is left at default values-----------
-        //---------later covariance values will also be used,------------------------
-        //---------so this can used as input to probabilistic filter like EKF/UKF----
-        // Odometry pose covariance
-        Eigen::MatrixXi c(6, 6);
-        c = Eigen::MatrixXi::Identity(6, 6);
-        odomMsg->pose.covariance[0]  = 0.1;
-        odomMsg->pose.covariance[7]  = 0.1;
-        odomMsg->pose.covariance[35] = 0.05;
-
-        odomMsg->pose.covariance[14] = 1e10; // set a non-zero covariance on unused
-        odomMsg->pose.covariance[21] = 1e10; // dimensions (z, pitch and roll); this
-        odomMsg->pose.covariance[28] = 1e10; // is a requirement of pose_slam
-        // Publish odometry message
-        odom_pub.publish(odomMsg);*/
         
 
         

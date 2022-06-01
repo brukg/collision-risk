@@ -54,6 +54,10 @@ class RGBD
         ros::Publisher pose_pub; //publishes geometry_msgs::PoseWithCovariance msgs
         ros::Publisher odom_pub; //publishes nav_msgs::Odometry msgs
         ros::Publisher pc_pub;  //publishes sensor_msgs::PointCloud2
+        ros::Publisher signal_pub;
+        ros::Publisher vis_pub; //publishes force direction
+        ros::Publisher vis_pub_centroid;
+        
         pcl::PointCloud<pcl::PointXYZ> _prev_cloud; //point cloud at the previous time instance
         pcl::PointCloud<pcl::PointXYZRGBA> _prev_rgba_cloud; //point cloud at the previous time instance
         std::vector < pcl::PointCloud<pcl::PointXYZ>::Ptr, Eigen::aligned_allocator <pcl::PointCloud <pcl::PointXYZ>::Ptr > > _prev_clustered_clouds;
@@ -75,6 +79,8 @@ class RGBD
         std::string _pose_pub_topic; //pose ros topic to which to publish
         std::string _odom_pub_topic; //odom ros topic to which to publish
         std::string _point_cloud_pub_topic;
+        std::string _stop_signal_topic;
+        
         /*----------ICP parameters------------*/
         double _leaf_size; //leaf size for voxel grid
         double _minX, _maxX, _minY, _maxY, _minZ, _maxZ; //min and max pts for box filter

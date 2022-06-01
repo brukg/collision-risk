@@ -4,13 +4,13 @@
 
 int main(int argc, char** argv)
 {
-    ros::init(argc, argv, "rgbd_node");
-    ros::NodeHandle node;
+    ros::init(argc, argv, "rgbd_node"); //node name
+    ros::NodeHandle node; //initializes node 
     ros::NodeHandle private_nh("~");
 
     RGBD RGBD(node, private_nh); //instance of RGBD class
 
-    ros::Rate loop_rate(10);
+    ros::Rate loop_rate(10); //loop frequency
 
     while(ros::ok())
     {

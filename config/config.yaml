@@ -14,6 +14,7 @@ imu_topic: /zed2/zed_node/imu/data #imu ros topic to subscribe to zed imu
 point_cloud_pub_topic: /turtlebot/rgbd/point_cloud/cloud_registered #point cloud ros topic to publish
 pose_pub_topic: /turtlebot/rgbd/pose #pose ros topic to which to publish
 odom_pub_topic: /turtlebot/rgbd/vo #odom(VO) to be used by ekf  ros topic to which to publish
+stop_signal_topic: /turtlebot/riskvector
 
 # filtering parametrs realsense
 leaf_size: 0.025 #leaf size for voxel grid for dawnsampling cloud points
@@ -22,7 +23,7 @@ eps_angle: 15 #allowed difference of angles in degrees for perpendicular plane m
 minX: 0 #min point of box filter
 minY: -5 #right
 minZ: 0.1
-maxX: 2 #max point of box filter
+maxX: 1 #max point of box filter
 maxY: 5 # left
 maxZ: 0.7 # height 
 mean_k: 5 #number of neighbors to analyze for each point for noise removal
